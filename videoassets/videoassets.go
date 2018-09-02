@@ -77,19 +77,16 @@ func DownloadFile(url, dest string) error {
 		return fmt.Errorf("could not convert Content-Length to int %v", err)
 	}
 
+	//create a signal to tell showProgress to stop
+	stop := make(chan bool)
+	go showProgress(filepath, total, stop)
+
 	//write file
 	_, err = io.Copy(f, res.Body)
 
 	if err != nil {
 		return fmt.Errorf("could not write to file %s; err %v", filepath, err)
 	}
-
-	//create a signal to tell showProgress to stop
-	stop := make(chan bool)
-
-	go showProgress(filepath, total, stop)
-
 	stop <- true
-
 	return nil
 }
