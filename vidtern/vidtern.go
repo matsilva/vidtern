@@ -1,7 +1,13 @@
 package vidtern
 
 import (
+	"fmt"
+	"io/ioutil"
+	"path"
+
+	"github.com/matsilva/vidtern/videoassets"
 	"github.com/matsilva/vidtern/videoconfig"
+	filetype "gopkg.in/h2non/filetype.v1"
 )
 
 //Create makes a video given a video config
@@ -16,25 +22,49 @@ func Create(videoConfig *videoconfig.VideoConfig) error {
 
 //Gets all of the assets needed to make the video
 func defineVideoAssets(videoConfig *videoconfig.VideoConfig) error {
-	//download assets
-	//get more information about the assets
-	// media type: [image, video]
 
-	//if image
-	// dimensions
+	var MediaTypes [2]string
+	MediaTypes[0] = "image"
+	MediaTypes[1] = "video"
 
-	//if video
-	// dimensions
-	//fps
-	//duration
-	return nil
-}
+	for _, scene := range videoConfig.Scenes {
+		filepath := path.Join(videoConfig.JobDir, path.Base(scene.Media))
+		scene.MediaInfo.FilePath = filepath
+		err := videoassets.DownloadFile(scene.Media, videoConfig.JobDir)
+		if err != nil {
+			return err
+		}
 
-func downloadVideoAssets(videoConfig *videoconfig.VideoConfig) error {
-	waitCount := len(videoConfig.Scenes)
-	for scene := range videoConfig.Scenes {
-		filename := urlParts[len(urlParts)-1]
+		buf, err := ioutil.ReadFile(filepath)
+		if err != nil {
+			return fmt.Errorf("could not read file %s to determine type; err %v", filepath, err)
+		}
+
+		if filetype.IsImage(buf) {
+			scene.MediaInfo.Type = MediaTypes[0]
+		}
+
+		if filetype.IsVideo(buf) {
+			scene.MediaInfo.Type = MediaTypes[1]
+		}
+
+		if scene.MediaInfo.Type == "" {
+			kind, _ := filetype.Match(buf)
+			return fmt.Errorf("supported file types are image and video, %s is %s", path.Base(filepath), kind)
+		}
+
+		//get more information about the assets
+		// media type: [image, video]
+		//if image
+		// dimensions
+
+		//if video
+		// dimensions
+		//fps
+		//duration
+
 	}
+	return nil
 }
 
 //Creates an individual video from scene
