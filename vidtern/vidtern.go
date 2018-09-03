@@ -13,28 +13,36 @@ import (
 //Create makes a video given a video config
 func Create(videoConfig *videoconfig.VideoConfig) error {
 
+	err := getVideoAssets(videoConfig)
+	if err != nil {
+		return err
+	}
 	//take the videoConfig and call ffmpeg to make the video!
-
 	//create videos per scene in go routines
+
 	//stich them all together
 	return nil
 }
 
 //Gets all of the assets needed to make the video
-func defineVideoAssets(videoConfig *videoconfig.VideoConfig) error {
+func getVideoAssets(videoConfig *videoconfig.VideoConfig) error {
 
 	var MediaTypes [2]string
 	MediaTypes[0] = "image"
 	MediaTypes[1] = "video"
 
 	for _, scene := range videoConfig.Scenes {
-		filepath := path.Join(videoConfig.JobDir, path.Base(scene.Media))
-		scene.MediaInfo.FilePath = filepath
+
 		err := videoassets.DownloadFile(scene.Media, videoConfig.JobDir)
 		if err != nil {
 			return err
 		}
 
+		//add filepath to video config
+		filepath := path.Join(videoConfig.JobDir, path.Base(scene.Media))
+		scene.MediaInfo.FilePath = filepath
+
+		//get the filetype and add to video config
 		buf, err := ioutil.ReadFile(filepath)
 		if err != nil {
 			return fmt.Errorf("could not read file %s to determine type; err %v", filepath, err)
@@ -42,27 +50,18 @@ func defineVideoAssets(videoConfig *videoconfig.VideoConfig) error {
 
 		if filetype.IsImage(buf) {
 			scene.MediaInfo.Type = MediaTypes[0]
+			//TODO: Get dimensions
 		}
 
 		if filetype.IsVideo(buf) {
 			scene.MediaInfo.Type = MediaTypes[1]
+			//TODO: Get dimensions, fps, duration
 		}
 
 		if scene.MediaInfo.Type == "" {
 			kind, _ := filetype.Match(buf)
 			return fmt.Errorf("supported file types are image and video, %s is %s", path.Base(filepath), kind)
 		}
-
-		//get more information about the assets
-		// media type: [image, video]
-		//if image
-		// dimensions
-
-		//if video
-		// dimensions
-		//fps
-		//duration
-
 	}
 	return nil
 }
