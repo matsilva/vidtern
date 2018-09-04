@@ -13,14 +13,24 @@ import (
 //Create makes a video given a video config
 func Create(videoConfig *videoconfig.VideoConfig) error {
 
+	//get assets syncronously
+	//try to avoid overloading network requests
 	err := getVideoAssets(videoConfig)
 	if err != nil {
 		return err
 	}
-	//take the videoConfig and call ffmpeg to make the video!
-	//create videos per scene in go routines
 
-	//stich them all together
+	//create videos per scene
+	//TODO: Add concurrency
+	//allow up to 3 jobs at a time, configurable by the user
+	for _, scene := range videoConfig.Scenes {
+		err := createScene(videoConfig, scene)
+		if err != nil {
+			return err
+		}
+	}
+
+	//stitch them all together
 	return nil
 }
 
@@ -67,9 +77,10 @@ func getVideoAssets(videoConfig *videoconfig.VideoConfig) error {
 }
 
 //Creates an individual video from scene
-func createScene(videoConfig *videoconfig.VideoConfig, sceneIndex int) error {
+func createScene(videoConfig *videoconfig.VideoConfig, scene interface{}) error {
 
 	//example text param
+	//https://www.ffmpeg.org/ffmpeg-filters.html#drawtext-1
 	//drawtext="fontfile=/usr/share/fonts/truetype/freefont/FreeSerif.ttf: text='Test Text':\
 	//x=100: y=50: fontsize=24: fontcolor=yellow@0.2: box=1: boxcolor=red@0.2"
 	return nil
