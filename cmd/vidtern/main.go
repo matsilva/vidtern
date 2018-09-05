@@ -16,12 +16,13 @@ func main() {
 	flag.Parse()
 
 	videoConfig, err := videoconfig.FromFile(*configPath)
-	videoConfig.JobDir = *jobDir
-	videoConfig.VideoName = *videoName + ".mp4"
 
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	videoConfig.VideoName = *videoName + ".mp4"
+	videoConfig.JobDir = *jobDir
 
 	err = vidtern.Create(videoConfig)
 
