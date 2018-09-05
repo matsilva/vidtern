@@ -1,87 +1,131 @@
 package vidtern
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
+	"os"
+	"os/exec"
 	"path"
+	"strconv"
+	"strings"
 
 	"github.com/matsilva/vidtern/videoassets"
 	"github.com/matsilva/vidtern/videoconfig"
-	filetype "gopkg.in/h2non/filetype.v1"
 )
 
 //Create makes a video given a video config
 func Create(videoConfig *videoconfig.VideoConfig) error {
 
-	//get assets syncronously
+	//get assets syncronously &
 	//try to avoid overloading network requests
-	err := getVideoAssets(videoConfig)
+	err := videoassets.GetVideoAssets(videoConfig)
 	if err != nil {
 		return err
 	}
 
-	//create videos per scene
 	//TODO: Add concurrency
 	//allow up to 3 jobs at a time, configurable by the user
-	for _, scene := range videoConfig.Scenes {
-		err := createScene(videoConfig, scene)
+	for index := range videoConfig.Scenes {
+		err := createScene(videoConfig, index)
 		if err != nil {
 			return err
 		}
 	}
 
-	//stitch them all together
-	return nil
-}
-
-//Gets all of the assets needed to make the video
-func getVideoAssets(videoConfig *videoconfig.VideoConfig) error {
-
-	var MediaTypes [2]string
-	MediaTypes[0] = "image"
-	MediaTypes[1] = "video"
-
-	for _, scene := range videoConfig.Scenes {
-
-		err := videoassets.DownloadFile(scene.Media, videoConfig.JobDir)
-		if err != nil {
-			return err
-		}
-
-		//add filepath to video config
-		filepath := path.Join(videoConfig.JobDir, path.Base(scene.Media))
-		scene.MediaInfo.FilePath = filepath
-
-		//get the filetype and add to video config
-		buf, err := ioutil.ReadFile(filepath)
-		if err != nil {
-			return fmt.Errorf("could not read file %s to determine type; err %v", filepath, err)
-		}
-
-		if filetype.IsImage(buf) {
-			scene.MediaInfo.Type = MediaTypes[0]
-			//TODO: Get dimensions
-		}
-
-		if filetype.IsVideo(buf) {
-			scene.MediaInfo.Type = MediaTypes[1]
-			//TODO: Get dimensions, fps, duration
-		}
-
-		if scene.MediaInfo.Type == "" {
-			kind, _ := filetype.Match(buf)
-			return fmt.Errorf("supported file types are image and video, %s is %s", path.Base(filepath), kind)
-		}
+	//concat all videos together into a single video
+	err = createVideoFromScenes(videoConfig)
+	if err != nil {
+		return err
 	}
 	return nil
 }
 
 //Creates an individual video from scene
-func createScene(videoConfig *videoconfig.VideoConfig, scene interface{}) error {
+func createScene(videoConfig *videoconfig.VideoConfig, index int) error {
 
-	//example text param
-	//https://www.ffmpeg.org/ffmpeg-filters.html#drawtext-1
-	//drawtext="fontfile=/usr/share/fonts/truetype/freefont/FreeSerif.ttf: text='Test Text':\
-	//x=100: y=50: fontsize=24: fontcolor=yellow@0.2: box=1: boxcolor=red@0.2"
+	scene := videoConfig.Scenes[index]
+	//https://golang.org/pkg/os/exec/#Command
+	var cmdOpts []string
+
+	switch scene.MediaInfo.Type {
+	case "image":
+		//add image and loop it for the configured duration
+		duration := strconv.Itoa(int(scene.Duration / 1000)) //fix this
+		cmdOpts = append(cmdOpts, "-loop 1 -i "+scene.MediaInfo.FilePath+" -c:v libx264 -t "+duration)
+	case "video":
+		cmdOpts = append(cmdOpts, "-i "+scene.MediaInfo.FilePath)
+	}
+
+	if scene.Text != "" {
+		//https://www.ffmpeg.org/ffmpeg-filters.html#drawtext-1
+		drawtext := "text='" + scene.Text + "': x=100: y=50: fontsize=24: fontcolor=yellow@0.2: box=1: boxcolor=red@0.2"
+		cmdOpts = append(cmdOpts, "-vf drawtext=\""+drawtext+"\"")
+	}
+
+	filename := "vidtern__scene_" + strconv.Itoa(index+1) + ".mp4"
+
+	//add out filename
+	cmdOpts = append(cmdOpts, "-o", path.Join(videoConfig.JobDir, filename))
+	cmd := exec.Command("ffmpeg", cmdOpts...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("could not create %s; err: %v", filename, err)
+	}
+	log.Printf("ffmpeg: %s", out.String())
 	return nil
+}
+
+func createVideoFromScenes(videoConfig *videoconfig.VideoConfig) error {
+
+	tmpfile, err := makeSceneFileList(videoConfig)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpfile.Name()) // clean up
+
+	cmdOpts := []string{
+		"-f concat -i",
+		path.Join(videoConfig.JobDir, tmpfile.Name()),
+		"-c copy",
+		path.Join(videoConfig.JobDir, videoConfig.VideoName),
+	}
+
+	cmd := exec.Command("ffmpeg", cmdOpts...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("could not create %s; err: %v", videoConfig.VideoName, err)
+	}
+	log.Printf("ffmpeg: %s", out.String())
+	return nil
+}
+
+func makeSceneFileList(videoConfig *videoconfig.VideoConfig) (*os.File, error) {
+
+	var content strings.Builder
+	for index := range videoConfig.Scenes {
+		filename := "vidtern__scene_" + strconv.Itoa(index+1) + ".mp4"
+		content.WriteString("file '" + path.Join(videoConfig.JobDir, filename) + "'\n")
+
+	}
+	tmpfile, err := ioutil.TempFile(videoConfig.JobDir, "vidtern_scenes.txt")
+	if err != nil {
+		return nil, fmt.Errorf("could not create new temp file %v", err)
+	}
+
+	//Make sure to to remove the file
+	//defer os.Remove(tmpfile.Name()) // clean up
+
+	if _, err := tmpfile.Write([]byte(content.String())); err != nil {
+		return nil, fmt.Errorf("could not write to temp file %v", err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		return nil, fmt.Errorf("could not close temp file %v", err)
+	}
+	return tmpfile, nil
 }
