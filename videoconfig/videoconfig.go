@@ -18,7 +18,8 @@ type VideoConfig struct {
 			Type     string
 		}
 	}
-	JobDir string
+	VideoName string
+	JobDir    string
 }
 
 //FromFile returns a configuration parsed from the given file.
