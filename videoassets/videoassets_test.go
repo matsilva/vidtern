@@ -60,7 +60,6 @@ func TestGetVideoAssets(t *testing.T) {
 	}
 
 	config.JobDir = os.TempDir()
-	config.VideoName = "test_get_video_assets"
 
 	t.Run("configure media info", func(t *testing.T) {
 		err := videoassets.GetVideoAssets(config)

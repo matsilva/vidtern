@@ -17,12 +17,12 @@ import (
 
 func showProgress(filepath string, total int, stop chan bool) {
 	start := time.Now()
-	log.Print("\n") //
+	log.Print("\n") //add newline to stdout
 	for {
 		select {
 		case <-stop:
 			elapsed := time.Since(start)
-			log.Printf("\ncompleted in %s => %s\n", elapsed, path.Base(filepath))
+			log.Printf("\ncompleted in %s ==> %s\n", elapsed, path.Base(filepath))
 			return
 		default:
 
@@ -45,9 +45,7 @@ func showProgress(filepath string, total int, stop chan bool) {
 			percent := float64(size) / float64(total) * 100
 
 			fmt.Printf("\r%.0f%% downloaded ==> file: %s", percent, filepath)
-			//print every second
 			time.Sleep(time.Millisecond * 100)
-
 		}
 	}
 }

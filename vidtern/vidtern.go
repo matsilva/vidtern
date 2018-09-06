@@ -49,6 +49,7 @@ func createScene(videoConfig *videoconfig.VideoConfig, index int) error {
 	//https://golang.org/pkg/os/exec/#Command
 	var cmdOpts []string
 
+	fmt.Printf("media type: %s for %s", scene.MediaInfo.Type, scene.MediaInfo.FilePath)
 	switch scene.MediaInfo.Type {
 	case "image":
 		//add image and loop it for the configured duration
@@ -67,15 +68,19 @@ func createScene(videoConfig *videoconfig.VideoConfig, index int) error {
 	filename := "vidtern__scene_" + strconv.Itoa(index+1) + ".mp4"
 
 	//add out filename
-	cmdOpts = append(cmdOpts, "-o", path.Join(videoConfig.JobDir, filename))
+	cmdOpts = append(cmdOpts, path.Join(videoConfig.JobDir, filename))
+	fmt.Printf("running: ffmpeg %s", strings.Join(cmdOpts, " "))
 	cmd := exec.Command("ffmpeg", cmdOpts...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	err := cmd.Run()
+	log.Printf("ffmpeg stdout: %s", stdout.String())
+	log.Printf("ffmpeg stderr: %s", stderr.String())
 	if err != nil {
 		return fmt.Errorf("could not create %s; err: %v", filename, err)
 	}
-	log.Printf("ffmpeg: %s", out.String())
 	return nil
 }
 
@@ -91,7 +96,7 @@ func createVideoFromScenes(videoConfig *videoconfig.VideoConfig) error {
 		"-f concat -i",
 		path.Join(videoConfig.JobDir, tmpfile.Name()),
 		"-c copy",
-		path.Join(videoConfig.JobDir, videoConfig.VideoName),
+		path.Join(videoConfig.JobDir, videoConfig.VideoName+".mp4"),
 	}
 
 	cmd := exec.Command("ffmpeg", cmdOpts...)
