@@ -17,11 +17,12 @@ import (
 
 func showProgress(filepath string, total int, stop chan bool) {
 	start := time.Now()
+	log.Print("\n") //
 	for {
 		select {
 		case <-stop:
 			elapsed := time.Since(start)
-			log.Printf("%s => completed in %s\n", filepath, elapsed)
+			log.Printf("\ncompleted in %s => %s\n", elapsed, path.Base(filepath))
 			return
 		default:
 
@@ -43,9 +44,9 @@ func showProgress(filepath string, total int, stop chan bool) {
 
 			percent := float64(size) / float64(total) * 100
 
-			log.Printf("%.0f%%\n", percent)
+			fmt.Printf("\r%.0f%% downloaded ==> file: %s", percent, filepath)
 			//print every second
-			time.Sleep(time.Second)
+			time.Sleep(time.Millisecond * 100)
 
 		}
 	}
@@ -54,7 +55,6 @@ func showProgress(filepath string, total int, stop chan bool) {
 //DownloadFile downloads a file from a url
 func DownloadFile(url, dest string) error {
 	filename := path.Base(url)
-	log.Printf("downloading file: %s from %s\n", filename, url)
 	filepath := path.Join(dest, filename)
 
 	// create writable file
@@ -97,22 +97,22 @@ func DownloadFile(url, dest string) error {
 
 //GetVideoAssets will download all of the media assets needed for the video
 //and further add media information to the video config
-func GetVideoAssets(videoConfig *videoconfig.VideoConfig) error {
+func GetVideoAssets(v *videoconfig.VideoConfig) error {
 
 	var MediaTypes [2]string
 	MediaTypes[0] = "image"
 	MediaTypes[1] = "video"
 
-	for _, scene := range videoConfig.Scenes {
+	for index := range v.Scenes {
 
-		err := DownloadFile(scene.Media, videoConfig.JobDir)
+		err := DownloadFile(v.Scenes[index].Media, v.JobDir)
 		if err != nil {
 			return err
 		}
 
 		//add filepath to video config
-		filepath := path.Join(videoConfig.JobDir, path.Base(scene.Media))
-		scene.MediaInfo.FilePath = filepath
+		filepath := path.Join(v.JobDir, path.Base(v.Scenes[index].Media))
+		v.Scenes[index].MediaInfo.FilePath = filepath
 
 		//get the filetype and add to video config
 		buf, err := ioutil.ReadFile(filepath)
@@ -121,16 +121,16 @@ func GetVideoAssets(videoConfig *videoconfig.VideoConfig) error {
 		}
 
 		if filetype.IsImage(buf) {
-			scene.MediaInfo.Type = MediaTypes[0]
+			v.Scenes[index].MediaInfo.Type = MediaTypes[0]
 			//TODO: Get dimensions
 		}
 
 		if filetype.IsVideo(buf) {
-			scene.MediaInfo.Type = MediaTypes[1]
+			v.Scenes[index].MediaInfo.Type = MediaTypes[1]
 			//TODO: Get dimensions, fps, duration
 		}
 
-		if scene.MediaInfo.Type == "" {
+		if v.Scenes[index].MediaInfo.Type == "" {
 			kind, _ := filetype.Match(buf)
 			return fmt.Errorf("supported file types are image and video, %s is %s", path.Base(filepath), kind)
 		}

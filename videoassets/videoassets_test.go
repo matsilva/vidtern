@@ -6,6 +6,8 @@ import (
 	"path"
 	"testing"
 
+	"github.com/matsilva/vidtern/videoconfig"
+
 	"github.com/matsilva/vidtern/videoassets"
 )
 
@@ -49,4 +51,31 @@ func TestDownloadFile(t *testing.T) {
 	}
 
 	//TODO: Add test to make sure bad url will fail
+}
+
+func TestGetVideoAssets(t *testing.T) {
+	config, err := videoconfig.FromFile("../testdata/sample-video-images.json")
+	if err != nil {
+		t.Fatalf("could not open config file %v", err)
+	}
+
+	config.JobDir = os.TempDir()
+	config.VideoName = "test_get_video_assets"
+
+	t.Run("configure media info", func(t *testing.T) {
+		err := videoassets.GetVideoAssets(config)
+		if err != nil {
+			t.Fatalf("could not get video assets %v", err)
+		}
+		for _, scene := range config.Scenes {
+			if scene.MediaInfo.FilePath == "" {
+				t.Fatalf("expected a correct FilePath, got: %v", scene.MediaInfo.FilePath)
+			}
+			if scene.MediaInfo.Type != "image" {
+				t.Fatalf("expected image %s to be type image, got: %s", scene.MediaInfo.FilePath, scene.MediaInfo.Type)
+			}
+
+			os.Remove(scene.MediaInfo.FilePath) //cleanup
+		}
+	})
 }

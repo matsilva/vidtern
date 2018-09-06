@@ -6,19 +6,23 @@ import (
 	"io/ioutil"
 )
 
+//Scene contains information about an individual
+//scene in the video
+type Scene struct {
+	Text     string `json:"text"`
+	Media    string `json:"media"`
+	Duration int    `json:"duration"`
+
+	MediaInfo struct {
+		FilePath string
+		Type     string
+	}
+}
+
 //VideoConfig contains the configuration for the video to be created
 type VideoConfig struct {
-	Scenes []struct {
-		Text     string `json:"text"`
-		Media    string `json:"media"`
-		Duration int    `json:"duration"`
-
-		MediaInfo struct {
-			FilePath string
-			Type     string
-		}
-	}
-	VideoName string
+	Scenes    []Scene
+	VideoName string `json:"name"`
 	JobDir    string
 }
 
@@ -38,6 +42,9 @@ func FromJSON(data []byte) (*VideoConfig, error) {
 	var videoConfig VideoConfig
 	if err := json.Unmarshal(data, &videoConfig); err != nil {
 		return nil, fmt.Errorf("could not unmarshal data %v; err: %v", data, err)
+	}
+	if videoConfig.VideoName == "" {
+		videoConfig.VideoName = "vidtern_finished_video"
 	}
 	return &videoConfig, nil
 }
