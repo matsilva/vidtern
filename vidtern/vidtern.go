@@ -47,30 +47,51 @@ func createScene(videoConfig *videoconfig.VideoConfig, index int) error {
 
 	scene := videoConfig.Scenes[index]
 	//https://golang.org/pkg/os/exec/#Command
-	var cmdOpts []string
+	var args []string
+	args = append(args, "-y") //overwrite
 
-	fmt.Printf("media type: %s for %s", scene.MediaInfo.Type, scene.MediaInfo.FilePath)
 	switch scene.MediaInfo.Type {
 	case "image":
 		//add image and loop it for the configured duration
-		duration := strconv.Itoa(int(scene.Duration / 1000)) //fix this
-		cmdOpts = append(cmdOpts, "-loop 1 -i "+scene.MediaInfo.FilePath+" -c:v libx264 -t "+duration)
+		duration := strconv.Itoa(int(scene.Duration / 1000))
+		args = append(args, "-loop")
+		args = append(args, "1")
+		args = append(args, "-i")
+		args = append(args, ""+scene.MediaInfo.FilePath+"")
+		args = append(args, "-c:v")
+		args = append(args, "libx264")
+		args = append(args, "-t")
+		args = append(args, duration)
 	case "video":
-		cmdOpts = append(cmdOpts, "-i "+scene.MediaInfo.FilePath)
+		args = append(args, "-i")
+		args = append(args, scene.MediaInfo.FilePath)
 	}
 
-	if scene.Text != "" {
-		//https://www.ffmpeg.org/ffmpeg-filters.html#drawtext-1
-		drawtext := "text='" + scene.Text + "': x=100: y=50: fontsize=24: fontcolor=yellow@0.2: box=1: boxcolor=red@0.2"
-		cmdOpts = append(cmdOpts, "-vf drawtext=\""+drawtext+"\"")
-	}
+	// if scene.Text != "" {
+	// 	//https://www.ffmpeg.org/ffmpeg-filters.html#drawtext-1
+	// 	//TODO: Fix paths to work on any os, make font a predictable path
+	// 	var drawtext strings.Builder
+	// 	drawtext.WriteString("fontfile=/Users/evsilva22/go/src/github.com/matsilva/vidtern/testdata/Lato-Black.ttf")
+	// 	drawtext.WriteString(": text='" + scene.Text + "'")
+	// 	drawtext.WriteString(": x=(w-tw)/2")
+	// 	drawtext.WriteString(": y=(h/PHI)+th")
+	// 	drawtext.WriteString(": fontsize=48")
+	// 	drawtext.WriteString(": fontcolor=yellow@0.2")
+	// 	drawtext.WriteString(": box=1")
+	// 	drawtext.WriteString(": boxcolor=red@0.2")
+	// 	args = append(args, "-vf")
+	// 	args = append(args, "drawtext=\""+drawtext.String()+"\"")
+	// }
 
 	filename := "vidtern__scene_" + strconv.Itoa(index+1) + ".mp4"
 
+	args = append(args, "-vf")
+	args = append(args, "scale=w=1920:-2:force_original_aspect_ratio=decrease")
 	//add out filename
-	cmdOpts = append(cmdOpts, path.Join(videoConfig.JobDir, filename))
-	fmt.Printf("running: ffmpeg %s", strings.Join(cmdOpts, " "))
-	cmd := exec.Command("ffmpeg", cmdOpts...)
+	args = append(args, path.Join(videoConfig.JobDir, filename))
+	fmt.Printf("running: ffmpeg %s\n", strings.Join(args, " "))
+	// cmd := exec.Command("ffmpeg", cmdArgs.String())
+	cmd := exec.Command("ffmpeg", args...)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -90,16 +111,24 @@ func createVideoFromScenes(videoConfig *videoconfig.VideoConfig) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmpfile.Name()) // clean up
 
-	cmdOpts := []string{
-		"-f concat -i",
-		path.Join(videoConfig.JobDir, tmpfile.Name()),
-		"-c copy",
+	// defer os.Remove(tmpfile.Name()) // clean up
+
+	args := []string{
+		"-y",
+		"-f",
+		"concat",
+		"-safe", // -safe 0 helps with unsafe filename error https://stackoverflow.com/questions/38996925/ffmpeg-concat-unsafe-file-name
+		"0",
+		"-i",
+		tmpfile.Name(),
+		"-c",
+		"copy",
 		path.Join(videoConfig.JobDir, videoConfig.VideoName+".mp4"),
 	}
 
-	cmd := exec.Command("ffmpeg", cmdOpts...)
+	fmt.Printf("running: ffmpeg %s\n", strings.Join(args, " "))
+	cmd := exec.Command("ffmpeg", args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err = cmd.Run()
@@ -113,12 +142,16 @@ func createVideoFromScenes(videoConfig *videoconfig.VideoConfig) error {
 func makeSceneFileList(videoConfig *videoconfig.VideoConfig) (*os.File, error) {
 
 	var content strings.Builder
-	for index := range videoConfig.Scenes {
+	content.WriteString("ffconcat version 1.0\n")
+	for index, scene := range videoConfig.Scenes {
 		filename := "vidtern__scene_" + strconv.Itoa(index+1) + ".mp4"
 		content.WriteString("file '" + path.Join(videoConfig.JobDir, filename) + "'\n")
-
+		if scene.Duration > 0 {
+			duration := strconv.Itoa(int(scene.Duration / 1000))
+			content.WriteString("duration " + duration + "\n")
+		}
 	}
-	tmpfile, err := ioutil.TempFile(videoConfig.JobDir, "vidtern_scenes.txt")
+	tmpfile, err := ioutil.TempFile(videoConfig.JobDir, "vidtern_scenes")
 	if err != nil {
 		return nil, fmt.Errorf("could not create new temp file %v", err)
 	}
